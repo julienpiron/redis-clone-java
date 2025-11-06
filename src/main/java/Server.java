@@ -1,19 +1,32 @@
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.logging.Handler;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Server {
   private final int port;
-  private final Logger logger = Logger.getLogger("Redis");
+  private final Logger logger;
 
   private ServerSocket serverSocket = null;
   private Socket clientSocket = null;
   private boolean running = false;
 
   public Server(int port) {
+    this(port, Level.WARNING);
+  }
+
+  public Server(int port, Level loggingLevel) {
     this.port = port;
+    this.logger = Logger.getLogger("Redis");
+    logger.setLevel(loggingLevel);
+    for (Handler handler : logger.getHandlers()) {
+      handler.setLevel(loggingLevel);
+    }
   }
 
   public void start() {
@@ -29,18 +42,27 @@ public class Server {
       logger.info("New client connexion: " + clientSocket.getPort());
 
       PrintWriter writer = new PrintWriter(clientSocket.getOutputStream());
-      writer.print("+PONG\r\n");
-      writer.flush();
+      BufferedReader reader =
+          new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+      char[] request = new char[1024];
+
+      while ((reader.read(request)) != -1) {
+        logger.info("Request: " + new String(request));
+        writer.print("+PONG\r\n");
+        writer.flush();
+        request = new char[1024];
+      }
 
     } catch (IOException e) {
-      logger.severe("IOException: " + e.getMessage());
+      logger.warning("IOException: " + e.getMessage());
     } finally {
       try {
         if (clientSocket != null) {
           clientSocket.close();
         }
       } catch (IOException e) {
-        logger.severe("IOException: " + e.getMessage());
+        logger.warning("IOException: " + e.getMessage());
       }
     }
   }
@@ -50,7 +72,7 @@ public class Server {
       try {
         serverSocket.close();
       } catch (IOException e) {
-        e.printStackTrace();
+        logger.info("IOException: " + e.getMessage());
       }
     }
     running = false;

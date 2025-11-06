@@ -10,6 +10,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
 import org.junit.jupiter.api.*;
 
 class TestClient implements AutoCloseable {
@@ -40,12 +41,13 @@ class TestClient implements AutoCloseable {
 }
 
 public class MainTest {
+  private static final Level LOGGING_LEVEL = Level.WARNING;
   private Server server;
   private Thread serverThread;
 
   @BeforeEach
   void startServer() throws IOException {
-    server = new Server(getRandomPort());
+    server = new Server(getRandomPort(), LOGGING_LEVEL);
     serverThread =
         new Thread(
             () -> {
@@ -78,6 +80,30 @@ public class MainTest {
     await().atMost(200, MILLISECONDS).until(() -> response.get() != null);
 
     assertEquals("+PONG\r\n", response.get());
+  }
+
+  @Test
+  void shouldHandleMultiplePINGs() {
+    AtomicReference<String> response1 = new AtomicReference<>();
+    AtomicReference<String> response2 = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server); ) {
+                response1.set(client.ping());
+                response2.set(client.ping());
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> response1.get() != null && response2.get() != null);
+
+    assertEquals("+PONG\r\n", response1.get());
+    assertEquals("+PONG\r\n", response1.get());
   }
 
   int getRandomPort() throws IOException {
