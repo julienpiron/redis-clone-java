@@ -3,19 +3,19 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
-import java.net.ServerSocket;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import net.datafaker.Faker;
 import org.junit.jupiter.api.*;
 
 public class MainTest {
-  private Server server;
+  private TestServer server;
   private Thread serverThread;
   private Faker faker = new Faker();
 
   @BeforeEach
   void startServer() throws IOException {
-    server = new Server(getRandomPort());
+    server = new TestServer();
     serverThread =
         new Thread(
             () -> {
@@ -145,9 +145,63 @@ public class MainTest {
     assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", getResponse.get());
   }
 
-  int getRandomPort() throws IOException {
-    try (ServerSocket serverSocket = new ServerSocket(0); ) {
-      return serverSocket.getLocalPort();
-    }
+  @Test
+  void shouldHandleSETwithEX() {
+    String spell = faker.harryPotter().spell();
+
+    AtomicReference<String> setResponse = new AtomicReference<>();
+    AtomicReference<String> responseBeforeExpiry = new AtomicReference<>();
+    AtomicReference<String> responseAfterExpiry = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server); ) {
+                setResponse.set(client.set("spell", spell, "EX", "2.5"));
+                server.advanceClock(Duration.ofSeconds(2));
+                responseBeforeExpiry.set(client.get("spell"));
+                server.advanceClock(Duration.ofSeconds(1));
+                responseAfterExpiry.set(client.get("spell"));
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> responseBeforeExpiry.get() != null && responseAfterExpiry.get() != null);
+
+    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry.get());
+    assertEquals("$-1\r\n", responseAfterExpiry.get());
+  }
+
+  @Test
+  void shouldHandleSETwithPX() {
+    String spell = faker.harryPotter().spell();
+
+    AtomicReference<String> setResponse = new AtomicReference<>();
+    AtomicReference<String> responseBeforeExpiry = new AtomicReference<>();
+    AtomicReference<String> responseAfterExpiry = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server); ) {
+                setResponse.set(client.set("spell", spell, "PX", "500"));
+                server.advanceClock(Duration.ofMillis(200));
+                responseBeforeExpiry.set(client.get("spell"));
+                server.advanceClock(Duration.ofMillis(400));
+                responseAfterExpiry.set(client.get("spell"));
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> responseBeforeExpiry.get() != null && responseAfterExpiry.get() != null);
+
+    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry.get());
+    assertEquals("$-1\r\n", responseAfterExpiry.get());
   }
 }

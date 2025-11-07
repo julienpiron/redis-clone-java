@@ -4,22 +4,23 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Clock;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Server {
-  private final int port;
-  private final Logger logger = LoggerFactory.getLogger(Server.class);
-
-  private boolean running;
-  private ServerSocket serverSocket;
-  private ConcurrentHashMap<String, String> store;
+  protected final int port;
+  protected final Logger logger = LoggerFactory.getLogger(Server.class);
+  protected boolean running;
+  protected ServerSocket serverSocket;
+  protected Store store;
+  protected Clock clock;
 
   public Server(int port) {
     this.port = port;
-
-    this.store = new ConcurrentHashMap<>();
+    this.store = new Store();
+    this.clock = Clock.systemDefaultZone();
   }
 
   public void start() {
@@ -50,16 +51,24 @@ public class Server {
 
       while ((command = reader.read()) != null) {
         logger.debug("Request: " + command);
+        logger.debug("Now: " + Instant.now(clock));
         String response =
             switch (command) {
               case PingCommand _ -> "+PONG\r\n";
               case EchoCommand c -> "$" + c.value().length() + "\r\n" + c.value() + "\r\n";
               case SetCommand c -> {
-                store.put(c.key(), c.value());
+                if (c.expiry().isEmpty()) {
+                  store.set(c.key(), c.value());
+                } else {
+                  store.set(c.key(), c.value(), Instant.now(clock).plus(c.expiry().get()));
+                }
                 yield "+OK\r\n";
               }
               case GetCommand c -> {
-                String value = store.get(c.key());
+                String value = store.get(c.key(), clock);
+                if (value == null) {
+                  yield "$-1\r\n";
+                }
                 yield "$" + value.length() + "\r\n" + value + "\r\n";
               }
               default -> throw new IllegalArgumentException("Unknown command");
@@ -99,5 +108,9 @@ public class Server {
 
   public boolean isRunning() {
     return running;
+  }
+
+  public Clock getClock() {
+    return clock;
   }
 }

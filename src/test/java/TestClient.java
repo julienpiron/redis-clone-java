@@ -46,6 +46,30 @@ class TestClient implements AutoCloseable {
     return getResponse();
   }
 
+  public String set(String key, String value, String exOrPx, String timeout) throws IOException {
+    writer.write(
+        "*5\r\n$3\r\nSET\r\n$"
+            + key.length()
+            + "\r\n"
+            + key
+            + "\r\n$"
+            + value.length()
+            + "\r\n"
+            + value
+            + "\r\n$"
+            + exOrPx.length()
+            + "\r\n"
+            + exOrPx
+            + "\r\n$"
+            + timeout.length()
+            + "\r\n"
+            + timeout
+            + "\r\n");
+    writer.flush();
+
+    return getResponse();
+  }
+
   public String get(String key) throws IOException {
     writer.write("*2\r\n$3\r\nGET\r\n$" + key.length() + "\r\n" + key + "\r\n");
     writer.flush();
