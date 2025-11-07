@@ -106,6 +106,31 @@ public class MainTest {
     assertEquals("+PONG\r\n", response1.get());
   }
 
+  @Test
+  void shouldHandleMultipleClients() {
+    AtomicReference<String> response1 = new AtomicReference<>();
+    AtomicReference<String> response2 = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client1 = new TestClient(server);
+                  TestClient client2 = new TestClient(server); ) {
+                response1.set(client1.ping());
+                response2.set(client2.ping());
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> response1.get() != null && response2.get() != null);
+
+    assertEquals("+PONG\r\n", response1.get());
+    assertEquals("+PONG\r\n", response1.get());
+  }
+
   int getRandomPort() throws IOException {
     try (ServerSocket serverSocket = new ServerSocket(0); ) {
       return serverSocket.getLocalPort();

@@ -13,7 +13,6 @@ public class Server {
   private final Logger logger;
 
   private ServerSocket serverSocket = null;
-  private Socket clientSocket = null;
   private boolean running = false;
 
   public Server(int port) {
@@ -30,7 +29,6 @@ public class Server {
   }
 
   public void start() {
-
     try {
       serverSocket = new ServerSocket(port);
       serverSocket.setReuseAddress(true);
@@ -38,9 +36,19 @@ public class Server {
       logger.info("Server started");
       running = true;
 
-      clientSocket = serverSocket.accept();
-      logger.info("New client connexion: " + clientSocket.getPort());
+      while (running) {
+        Socket clientSocket = serverSocket.accept();
+        logger.info("New client connexion: " + clientSocket.getPort());
+        new Thread(() -> handleClien(clientSocket)).start();
+      }
 
+    } catch (IOException e) {
+      logger.info("IOException: " + e.getMessage());
+    }
+  }
+
+  private void handleClien(Socket clientSocket) {
+    try {
       PrintWriter writer = new PrintWriter(clientSocket.getOutputStream());
       BufferedReader reader =
           new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -53,7 +61,6 @@ public class Server {
         writer.flush();
         request = new char[1024];
       }
-
     } catch (IOException e) {
       logger.warning("IOException: " + e.getMessage());
     } finally {
