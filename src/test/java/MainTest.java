@@ -29,18 +29,46 @@ class TestClient implements AutoCloseable {
     writer.write("*1\r\n$4\r\nPING\r\n");
     writer.flush();
 
-    char[] response = new char[7];
-    reader.read(response);
-
-    return new String(response);
+    return getResponse();
   }
 
   public String echo(String value) throws IOException {
     writer.write("*2\r\n$4\r\nECHO\r\n$" + value.length() + "\r\n" + value + "\r\n");
     writer.flush();
 
-    char[] response = new char[1024];
+    return getResponse();
+  }
+
+  public String set(String key, String value) throws IOException {
+    writer.write(
+        "*3\r\n$3\r\nSET\r\n$"
+            + key.length()
+            + "\r\n"
+            + key
+            + "\r\n$"
+            + value.length()
+            + "\r\n"
+            + value
+            + "\r\n");
+    writer.flush();
+
+    return getResponse();
+  }
+
+  public String get(String key) throws IOException {
+    writer.write("*2\r\n$3\r\nGET\r\n$" + key.length() + "\r\n" + key + "\r\n");
+    writer.flush();
+
+    return getResponse();
+  }
+
+  private String getResponse() throws IOException {
+    char[] response = new char[2048];
     int length = reader.read(response);
+
+    if (length <= 0) {
+      return null;
+    }
 
     return new String(response, 0, length);
   }
@@ -52,7 +80,7 @@ class TestClient implements AutoCloseable {
 }
 
 public class MainTest {
-  private static final Level LOGGING_LEVEL = Level.WARNING;
+  private static final Level LOGGING_LEVEL = Level.FINEST;
   private Server server;
   private Thread serverThread;
   private Faker faker = new Faker();
@@ -161,6 +189,32 @@ public class MainTest {
     await().atMost(200, MILLISECONDS).until(() -> response.get() != null);
 
     assertEquals("$" + payload.length() + "\r\n" + payload + "\r\n", response.get());
+  }
+
+  @Test
+  void shouldHandleSETandGET() {
+    String spell = faker.harryPotter().spell();
+
+    AtomicReference<String> setResponse = new AtomicReference<>();
+    AtomicReference<String> getResponse = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server); ) {
+                setResponse.set(client.set("spell", spell));
+                getResponse.set(client.get("spell"));
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> setResponse.get() != null && getResponse.get() != null);
+
+    assertEquals("+OK\r\n", setResponse.get());
+    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", getResponse.get());
   }
 
   int getRandomPort() throws IOException {

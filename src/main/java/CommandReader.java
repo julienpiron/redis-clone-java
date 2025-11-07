@@ -32,6 +32,8 @@ class CommandReader {
     return switch (parts.get(0).toUpperCase()) {
       case "PING" -> new PingCommand();
       case "ECHO" -> new EchoCommand(parts.get(1));
+      case "SET" -> new SetCommand(parts.get(1), parts.get(2));
+      case "GET" -> new GetCommand(parts.get(1));
       default -> throw new IllegalArgumentException("Unknown command: " + parts.get(0));
     };
   }
