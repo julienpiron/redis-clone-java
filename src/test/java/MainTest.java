@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
+import net.datafaker.Faker;
 import org.junit.jupiter.api.*;
 
 class TestClient implements AutoCloseable {
@@ -34,6 +35,16 @@ class TestClient implements AutoCloseable {
     return new String(response);
   }
 
+  public String echo(String value) throws IOException {
+    writer.write("*2\r\n$4\r\nECHO\r\n$" + value.length() + "\r\n" + value + "\r\n");
+    writer.flush();
+
+    char[] response = new char[1024];
+    int length = reader.read(response);
+
+    return new String(response, 0, length);
+  }
+
   @Override
   public void close() throws Exception {
     socket.close();
@@ -44,6 +55,7 @@ public class MainTest {
   private static final Level LOGGING_LEVEL = Level.WARNING;
   private Server server;
   private Thread serverThread;
+  private Faker faker = new Faker();
 
   @BeforeEach
   void startServer() throws IOException {
@@ -129,6 +141,26 @@ public class MainTest {
 
     assertEquals("+PONG\r\n", response1.get());
     assertEquals("+PONG\r\n", response1.get());
+  }
+
+  @Test
+  void shouldHandleECHO() {
+    String payload = faker.hobbit().character();
+    AtomicReference<String> response = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server); ) {
+                response.set(client.echo(payload));
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await().atMost(200, MILLISECONDS).until(() -> response.get() != null);
+
+    assertEquals("$" + payload.length() + "\r\n" + payload + "\r\n", response.get());
   }
 
   int getRandomPort() throws IOException {

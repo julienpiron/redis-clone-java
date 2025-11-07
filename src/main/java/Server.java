@@ -37,9 +37,9 @@ public class Server {
       running = true;
 
       while (running) {
-        Socket clientSocket = serverSocket.accept();
-        logger.info("New client connexion: " + clientSocket.getPort());
-        new Thread(() -> handleClien(clientSocket)).start();
+        Socket client = serverSocket.accept();
+        logger.info("New client connexion: " + client.getPort());
+        new Thread(() -> handleClient(client)).start();
       }
 
     } catch (IOException e) {
@@ -47,26 +47,33 @@ public class Server {
     }
   }
 
-  private void handleClien(Socket clientSocket) {
+  private void handleClient(Socket client) {
     try {
-      PrintWriter writer = new PrintWriter(clientSocket.getOutputStream());
-      BufferedReader reader =
-          new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+      PrintWriter writer = new PrintWriter(client.getOutputStream());
+      CommandReader reader =
+          new CommandReader(new BufferedReader(new InputStreamReader(client.getInputStream())));
 
-      char[] request = new char[1024];
+      Command command;
 
-      while ((reader.read(request)) != -1) {
-        logger.info("Request: " + new String(request));
-        writer.print("+PONG\r\n");
+      while ((command = reader.read()) != null) {
+        logger.info("Request: " + command);
+        String response =
+            switch (command) {
+              case PingCommand _ -> "+PONG\r\n";
+              case EchoCommand c -> "$" + c.value().length() + "\r\n" + c.value() + "\r\n";
+              default -> throw new IllegalArgumentException("Unknown command");
+            };
+
+        writer.print(response);
         writer.flush();
-        request = new char[1024];
       }
+
     } catch (IOException e) {
       logger.warning("IOException: " + e.getMessage());
     } finally {
       try {
-        if (clientSocket != null) {
-          clientSocket.close();
+        if (client != null) {
+          client.close();
         }
       } catch (IOException e) {
         logger.warning("IOException: " + e.getMessage());
