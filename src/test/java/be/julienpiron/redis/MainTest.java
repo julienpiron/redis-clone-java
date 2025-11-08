@@ -233,4 +233,32 @@ public class MainTest {
     assertEquals("+string\r\n", response1.get());
     assertEquals("+none\r\n", response2.get());
   }
+
+  @Test
+  void shouldHandleXADD() {
+    String title = faker.harryPotter().book();
+    String pages = Integer.toString(faker.number().numberBetween(100, 999));
+
+    AtomicReference<String> xaddResponse = new AtomicReference<>();
+    AtomicReference<String> typeResponse = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server)) {
+                xaddResponse.set(
+                    client.send("XADD", "books", "0-1", "title", title, "pages", pages));
+                typeResponse.set(client.send("TYPE", "books"));
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> xaddResponse.get() != null && typeResponse.get() != null);
+
+    assertEquals("$3\r\n0-1\r\n", xaddResponse.get());
+    assertEquals("+stream\r\n", typeResponse.get());
+  }
 }

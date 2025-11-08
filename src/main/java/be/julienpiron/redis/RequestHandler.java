@@ -2,6 +2,9 @@ package be.julienpiron.redis;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +29,7 @@ public class RequestHandler {
       case "PING" -> ping();
       case "TYPE" -> type();
       case "SET" -> set();
+      case "XADD" -> xadd();
       default -> throw new InvalidRequestException("Unknown command: " + request.command());
     };
   }
@@ -35,7 +39,7 @@ public class RequestHandler {
   }
 
   private RESPDataType get() throws InvalidRequestException {
-    String value = store.get(request.argAsString(0), clock);
+    String value = store.getString(request.argAsString(0), clock);
 
     if (value == null) return new RESP.BulkString(null);
 
@@ -56,7 +60,7 @@ public class RequestHandler {
     String value = request.argAsString(1);
 
     if (request.args().size() == 2) {
-      store.set(key, value);
+      store.setString(key, value);
       return new RESP.SimpleString("OK");
     }
 
@@ -67,7 +71,7 @@ public class RequestHandler {
     ExpiryType expiryType = request.argAsEnum(2, ExpiryType.class);
     Double expiryOffset = request.argAsDouble(3);
 
-    store.set(
+    store.setString(
         key,
         value,
         switch (expiryType) {
@@ -76,5 +80,20 @@ public class RequestHandler {
         });
 
     return new RESP.SimpleString("OK");
+  }
+
+  private RESPDataType xadd() throws InvalidRequestException {
+    String key = request.argAsString(0);
+    String id = request.argAsString(1);
+
+    Map<String, String> entries = new HashMap<>();
+
+    for (int i = 2; i + 1 < request.args().size(); i += 2) {
+      entries.put(request.argAsString(i), request.argAsString(i + 1));
+    }
+
+    store.setStream(key, new LinkedHashMap<>(Map.of(id, entries)));
+
+    return new RESP.BulkString(id);
   }
 }

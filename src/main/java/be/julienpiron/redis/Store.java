@@ -2,12 +2,18 @@ package be.julienpiron.redis;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-record StringEntry(String value, Optional<Instant> expiry) {
+interface Entry {
+  String type();
+}
+
+record StringEntry(String value, Optional<Instant> expiry) implements Entry {
   boolean isExpired(Clock clock) {
     if (expiry.isEmpty()) {
       return false;
@@ -16,49 +22,62 @@ record StringEntry(String value, Optional<Instant> expiry) {
     return Instant.now(clock).isAfter(expiry.get());
   }
 
-  String type() {
+  @Override
+  public String type() {
     return "string";
   }
 }
 
+record StreamEntry(LinkedHashMap<String, Map<String, String>> value) implements Entry {
+
+  @Override
+  public String type() {
+    return "stream";
+  }
+}
+
 public class Store {
-  private final ConcurrentHashMap<String, StringEntry> map;
+  private final ConcurrentHashMap<String, Entry> map;
   private final Logger logger = LoggerFactory.getLogger(Store.class);
 
   public Store() {
     map = new ConcurrentHashMap<>();
   }
 
-  public String get(String key, Clock clock) {
+  public String getString(String key, Clock clock) {
     logger.debug("Getting: " + key);
 
-    StringEntry entry = map.get(key);
+    Entry entry = map.get(key);
 
     logger.debug("Got: " + entry);
 
-    if (entry == null) {
+    if (!(entry instanceof StringEntry stringEntry)) {
       return null;
     }
 
-    if (entry.isExpired(clock)) {
+    if (stringEntry.isExpired(clock)) {
       logger.debug("Entry " + key + " is expired");
       map.remove(key);
       return null;
     }
 
-    return entry.value();
+    return stringEntry.value();
   }
 
-  public void set(String key, String value) {
+  public void setString(String key, String value) {
     map.put(key, new StringEntry(value, Optional.empty()));
   }
 
-  public void set(String key, String value, Instant expiry) {
+  public void setString(String key, String value, Instant expiry) {
     map.put(key, new StringEntry(value, Optional.of(expiry)));
   }
 
+  public void setStream(String key, LinkedHashMap<String, Map<String, String>> stream) {
+    map.put(key, new StreamEntry(stream));
+  }
+
   public String type(String key) {
-    StringEntry entry = map.get(key);
+    Entry entry = map.get(key);
 
     if (entry == null) return "none";
 
