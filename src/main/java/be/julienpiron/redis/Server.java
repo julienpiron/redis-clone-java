@@ -1,3 +1,5 @@
+package be.julienpiron.redis;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -5,7 +7,6 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.Clock;
-import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,53 +51,12 @@ public class Server {
       Request request;
 
       while ((request = reader.read()) != null) {
+        logger.debug("Request: {}", request);
         try {
+          RequestHandler handler = new RequestHandler(request, store, clock);
 
-          String response =
-              switch (request.command()) {
-                case "ECHO" ->
-                    "$"
-                        + request.argAsString(0).length()
-                        + "\r\n"
-                        + request.argAsString(0)
-                        + "\r\n";
-                case "GET" -> {
-                  String value = store.get(request.argAsString(0), clock);
-
-                  if (value == null) yield "$-1\r\n";
-
-                  yield "$" + value.length() + "\r\n" + value + "\r\n";
-                }
-                case "PING" -> "+PONG\r\n";
-                case "SET" -> {
-                  String key = request.argAsString(0);
-                  String value = request.argAsString(1);
-
-                  if (request.args().size() == 2) {
-                    store.set(key, value);
-                    yield "+OK\r\n";
-                  }
-
-                  enum ExpiryType {
-                    EX,
-                    PX;
-                  }
-                  ExpiryType expiryType = request.argAsEnum(2, ExpiryType.class);
-                  Double expiryOffset = request.argAsDouble(3);
-
-                  store.set(
-                      key,
-                      value,
-                      switch (expiryType) {
-                        case EX ->
-                            Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000_000));
-                        case PX -> Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000));
-                      });
-
-                  yield "+OK\r\n";
-                }
-                default -> throw new IllegalArgumentException("Unknown command");
-              };
+          String response = handler.handle();
+          logger.debug("Response: {}", response);
 
           writer.print(response);
           writer.flush();

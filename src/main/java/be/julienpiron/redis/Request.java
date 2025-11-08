@@ -1,3 +1,5 @@
+package be.julienpiron.redis;
+
 import java.util.List;
 
 public record Request(String command, List<String> args) {

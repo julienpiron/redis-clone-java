@@ -41,7 +41,7 @@
             <manifest>
               <addClasspath>true</addClasspath>
               <!-- This is the main class of your program which will be executed-->
-              <mainClass>Main</mainClass>
+              <mainClass>be.julienpiron.redis.Main</mainClass>
             </manifest>
           </archive>
           <outputDirectory>${dir}</outputDirectory>

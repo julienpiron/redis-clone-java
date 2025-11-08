@@ -1,13 +1,12 @@
+package be.julienpiron.redis;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class RequestParser {
   private final BufferedReader reader;
-  private final Logger logger = LoggerFactory.getLogger(RequestParser.class);
 
   RequestParser(BufferedReader reader) {
     this.reader = reader;
@@ -35,8 +34,6 @@ class RequestParser {
     }
 
     Request request = new Request(command, args);
-
-    logger.debug("Parsed request: " + request);
 
     return request;
   }

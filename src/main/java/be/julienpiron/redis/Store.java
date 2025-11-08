@@ -1,3 +1,5 @@
+package be.julienpiron.redis;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -15,15 +17,15 @@ record StringEntry(String value, Optional<Instant> expiry) {
   }
 }
 
-class Store {
+public class Store {
   private final ConcurrentHashMap<String, StringEntry> map;
   private final Logger logger = LoggerFactory.getLogger(Store.class);
 
-  Store() {
+  public Store() {
     map = new ConcurrentHashMap<>();
   }
 
-  String get(String key, Clock clock) {
+  public String get(String key, Clock clock) {
     logger.debug("Getting: " + key);
 
     StringEntry entry = map.get(key);
@@ -43,11 +45,11 @@ class Store {
     return entry.value();
   }
 
-  void set(String key, String value) {
+  public void set(String key, String value) {
     map.put(key, new StringEntry(value, Optional.empty()));
   }
 
-  void set(String key, String value, Instant expiry) {
+  public void set(String key, String value, Instant expiry) {
     map.put(key, new StringEntry(value, Optional.of(expiry)));
   }
 }
