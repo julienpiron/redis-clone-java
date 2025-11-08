@@ -44,38 +44,65 @@ public class Server {
   private void handleClient(Socket client) {
     try {
       PrintWriter writer = new PrintWriter(client.getOutputStream());
-      CommandReader reader =
-          new CommandReader(new BufferedReader(new InputStreamReader(client.getInputStream())));
+      RequestParser reader =
+          new RequestParser(new BufferedReader(new InputStreamReader(client.getInputStream())));
 
-      Command command;
+      Request request;
 
-      while ((command = reader.read()) != null) {
-        logger.debug("Request: " + command);
-        logger.debug("Now: " + Instant.now(clock));
-        String response =
-            switch (command) {
-              case PingCommand _ -> "+PONG\r\n";
-              case EchoCommand c -> "$" + c.value().length() + "\r\n" + c.value() + "\r\n";
-              case SetCommand c -> {
-                if (c.expiry().isEmpty()) {
-                  store.set(c.key(), c.value());
-                } else {
-                  store.set(c.key(), c.value(), Instant.now(clock).plus(c.expiry().get()));
+      while ((request = reader.read()) != null) {
+        try {
+
+          String response =
+              switch (request.command()) {
+                case "ECHO" ->
+                    "$"
+                        + request.argAsString(0).length()
+                        + "\r\n"
+                        + request.argAsString(0)
+                        + "\r\n";
+                case "GET" -> {
+                  String value = store.get(request.argAsString(0), clock);
+
+                  if (value == null) yield "$-1\r\n";
+
+                  yield "$" + value.length() + "\r\n" + value + "\r\n";
                 }
-                yield "+OK\r\n";
-              }
-              case GetCommand c -> {
-                String value = store.get(c.key(), clock);
-                if (value == null) {
-                  yield "$-1\r\n";
-                }
-                yield "$" + value.length() + "\r\n" + value + "\r\n";
-              }
-              default -> throw new IllegalArgumentException("Unknown command");
-            };
+                case "PING" -> "+PONG\r\n";
+                case "SET" -> {
+                  String key = request.argAsString(0);
+                  String value = request.argAsString(1);
 
-        writer.print(response);
-        writer.flush();
+                  if (request.args().size() == 2) {
+                    store.set(key, value);
+                    yield "+OK\r\n";
+                  }
+
+                  enum ExpiryType {
+                    EX,
+                    PX;
+                  }
+                  ExpiryType expiryType = request.argAsEnum(2, ExpiryType.class);
+                  Double expiryOffset = request.argAsDouble(3);
+
+                  store.set(
+                      key,
+                      value,
+                      switch (expiryType) {
+                        case EX ->
+                            Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000_000));
+                        case PX -> Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000));
+                      });
+
+                  yield "+OK\r\n";
+                }
+                default -> throw new IllegalArgumentException("Unknown command");
+              };
+
+          writer.print(response);
+          writer.flush();
+        } catch (InvalidRequestException e) {
+          logger.error("Invalid Request: " + e.getMessage());
+        }
       }
 
     } catch (IOException e) {
