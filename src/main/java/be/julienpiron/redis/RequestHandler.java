@@ -14,7 +14,7 @@ public class RequestHandler {
     this.clock = clock;
   }
 
-  public String handle() throws InvalidRequestException {
+  public RESPDataType handle() throws InvalidRequestException {
     return switch (request.command()) {
       case "ECHO" -> echo();
       case "GET" -> get();
@@ -24,29 +24,29 @@ public class RequestHandler {
     };
   }
 
-  private String echo() throws InvalidRequestException {
-    return "$" + request.argAsString(0).length() + "\r\n" + request.argAsString(0) + "\r\n";
+  private RESPDataType echo() throws InvalidRequestException {
+    return new RESP.BulkString(request.argAsString(0));
   }
 
-  private String get() throws InvalidRequestException {
+  private RESPDataType get() throws InvalidRequestException {
     String value = store.get(request.argAsString(0), clock);
 
-    if (value == null) return "$-1\r\n";
+    if (value == null) return new RESP.BulkString(null);
 
-    return "$" + value.length() + "\r\n" + value + "\r\n";
+    return new RESP.BulkString(value);
   }
 
-  private String ping() {
-    return "+PONG\r\n";
+  private RESPDataType ping() {
+    return new RESP.SimpleString("PONG");
   }
 
-  private String set() throws InvalidRequestException {
+  private RESPDataType set() throws InvalidRequestException {
     String key = request.argAsString(0);
     String value = request.argAsString(1);
 
     if (request.args().size() == 2) {
       store.set(key, value);
-      return "+OK\r\n";
+      return new RESP.SimpleString("OK");
     }
 
     enum ExpiryType {
@@ -64,6 +64,6 @@ public class RequestHandler {
           case PX -> Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000));
         });
 
-    return "+OK\r\n";
+    return new RESP.SimpleString("OK");
   }
 }

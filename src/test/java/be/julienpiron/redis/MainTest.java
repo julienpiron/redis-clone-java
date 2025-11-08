@@ -40,7 +40,7 @@ public class MainTest {
     new Thread(
             () -> {
               try (TestClient client = new TestClient(server); ) {
-                response.set(client.ping());
+                response.set(client.send("PING"));
               } catch (Exception e) {
                 fail(e);
               }
@@ -60,8 +60,8 @@ public class MainTest {
     new Thread(
             () -> {
               try (TestClient client = new TestClient(server); ) {
-                response1.set(client.ping());
-                response2.set(client.ping());
+                response1.set(client.send("PING"));
+                response2.set(client.send("PING"));
               } catch (Exception e) {
                 fail(e);
               }
@@ -85,8 +85,8 @@ public class MainTest {
             () -> {
               try (TestClient client1 = new TestClient(server);
                   TestClient client2 = new TestClient(server); ) {
-                response1.set(client1.ping());
-                response2.set(client2.ping());
+                response1.set(client1.send("PING"));
+                response2.set(client2.send("PING"));
               } catch (Exception e) {
                 fail(e);
               }
@@ -109,7 +109,7 @@ public class MainTest {
     new Thread(
             () -> {
               try (TestClient client = new TestClient(server); ) {
-                response.set(client.echo(payload));
+                response.set(client.send("ECHO", payload));
               } catch (Exception e) {
                 fail(e);
               }
@@ -131,8 +131,8 @@ public class MainTest {
     new Thread(
             () -> {
               try (TestClient client = new TestClient(server); ) {
-                setResponse.set(client.set("spell", spell));
-                getResponse.set(client.get("spell"));
+                setResponse.set(client.send("SET", "spell", spell));
+                getResponse.set(client.send("GET", "spell"));
               } catch (Exception e) {
                 fail(e);
               }
@@ -158,11 +158,11 @@ public class MainTest {
     new Thread(
             () -> {
               try (TestClient client = new TestClient(server); ) {
-                setResponse.set(client.set("spell", spell, "EX", "2.5"));
+                setResponse.set(client.send("SET", "spell", spell, "EX", "2.5"));
                 server.advanceClock(Duration.ofSeconds(2));
-                responseBeforeExpiry.set(client.get("spell"));
+                responseBeforeExpiry.set(client.send("GET", "spell"));
                 server.advanceClock(Duration.ofSeconds(1));
-                responseAfterExpiry.set(client.get("spell"));
+                responseAfterExpiry.set(client.send("GET", "spell"));
               } catch (Exception e) {
                 fail(e);
               }
@@ -188,11 +188,11 @@ public class MainTest {
     new Thread(
             () -> {
               try (TestClient client = new TestClient(server); ) {
-                setResponse.set(client.set("spell", spell, "PX", "500"));
+                setResponse.set(client.send("SET", "spell", spell, "PX", "500"));
                 server.advanceClock(Duration.ofMillis(200));
-                responseBeforeExpiry.set(client.get("spell"));
+                responseBeforeExpiry.set(client.send("GET", "spell"));
                 server.advanceClock(Duration.ofMillis(400));
-                responseAfterExpiry.set(client.get("spell"));
+                responseAfterExpiry.set(client.send("GET", "spell"));
               } catch (Exception e) {
                 fail(e);
               }

@@ -55,10 +55,10 @@ public class Server {
         try {
           RequestHandler handler = new RequestHandler(request, store, clock);
 
-          String response = handler.handle();
+          RESPDataType response = handler.handle();
           logger.debug("Response: {}", response);
 
-          writer.print(response);
+          writer.print(response.encode());
           writer.flush();
         } catch (InvalidRequestException e) {
           logger.error("Invalid Request: " + e.getMessage());
