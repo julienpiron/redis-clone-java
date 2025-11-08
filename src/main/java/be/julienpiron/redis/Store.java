@@ -15,6 +15,10 @@ record StringEntry(String value, Optional<Instant> expiry) {
 
     return Instant.now(clock).isAfter(expiry.get());
   }
+
+  String type() {
+    return "string";
+  }
 }
 
 public class Store {
@@ -51,5 +55,13 @@ public class Store {
 
   public void set(String key, String value, Instant expiry) {
     map.put(key, new StringEntry(value, Optional.of(expiry)));
+  }
+
+  public String type(String key) {
+    StringEntry entry = map.get(key);
+
+    if (entry == null) return "none";
+
+    return entry.type();
   }
 }

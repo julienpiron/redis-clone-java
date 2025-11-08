@@ -206,4 +206,31 @@ public class MainTest {
     assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry.get());
     assertEquals("$-1\r\n", responseAfterExpiry.get());
   }
+
+  @Test
+  void shouldHandleTYPE() {
+    String character = faker.harryPotter().character();
+
+    AtomicReference<String> response1 = new AtomicReference<>();
+    AtomicReference<String> response2 = new AtomicReference<>();
+
+    new Thread(
+            () -> {
+              try (TestClient client = new TestClient(server)) {
+                client.send("SET", "favourite_character", character);
+                response1.set(client.send("TYPE", "favourite_character"));
+                response2.set(client.send("TYPE", "missing_key"));
+              } catch (Exception e) {
+                fail(e);
+              }
+            })
+        .start();
+
+    await()
+        .atMost(200, MILLISECONDS)
+        .until(() -> response1.get() != null && response2.get() != null);
+
+    assertEquals("+string\r\n", response1.get());
+    assertEquals("+none\r\n", response2.get());
+  }
 }

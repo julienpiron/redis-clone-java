@@ -2,8 +2,11 @@ package be.julienpiron.redis;
 
 import java.time.Clock;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class RequestHandler {
+  private Logger logger = LoggerFactory.getLogger(RequestHandler.class);
   private Request request;
   private Store store;
   private Clock clock;
@@ -15,10 +18,13 @@ public class RequestHandler {
   }
 
   public RESPDataType handle() throws InvalidRequestException {
+    logger.debug("Handling request: {}", request);
+
     return switch (request.command()) {
       case "ECHO" -> echo();
       case "GET" -> get();
       case "PING" -> ping();
+      case "TYPE" -> type();
       case "SET" -> set();
       default -> throw new InvalidRequestException("Unknown command: " + request.command());
     };
@@ -38,6 +44,11 @@ public class RequestHandler {
 
   private RESPDataType ping() {
     return new RESP.SimpleString("PONG");
+  }
+
+  private RESPDataType type() throws InvalidRequestException {
+    String key = request.argAsString(0);
+    return new RESP.SimpleString(store.type(key));
   }
 
   private RESPDataType set() throws InvalidRequestException {
