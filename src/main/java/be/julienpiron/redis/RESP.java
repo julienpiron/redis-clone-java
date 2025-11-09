@@ -25,6 +25,12 @@ public abstract class RESP {
     }
   }
 
+  public record SimpleError(String message) implements RESPDataType {
+    public String encode() {
+      return "-" + message + CTRL;
+    }
+  }
+
   public record Array(List<RESPDataType> items) implements RESPDataType {
     public Array(String... args) {
       this(Arrays.stream(args).map(BulkString::new).<RESPDataType>map(b -> b).toList());

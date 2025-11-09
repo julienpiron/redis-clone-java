@@ -2,8 +2,7 @@ package be.julienpiron.redis;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.LinkedList;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -28,7 +27,10 @@ record StringEntry(String value, Optional<Instant> expiry) implements Entry {
   }
 }
 
-record StreamEntry(LinkedHashMap<String, Map<String, String>> value) implements Entry {
+record StreamEntry(LinkedList<Stream> values) implements Entry {
+  public StreamEntry() {
+    this(new LinkedList<>());
+  }
 
   @Override
   public String type() {
@@ -72,8 +74,25 @@ public class Store {
     map.put(key, new StringEntry(value, Optional.of(expiry)));
   }
 
-  public void setStream(String key, LinkedHashMap<String, Map<String, String>> stream) {
-    map.put(key, new StreamEntry(stream));
+  public void setStream(String key, Stream stream) {
+    map.putIfAbsent(key, new StreamEntry());
+
+    Entry entry = map.get(key);
+
+    if (!(entry instanceof StreamEntry streamEntry))
+      throw new IllegalArgumentException(key + " is not a stream");
+
+    if (!streamEntry.values().isEmpty()) {
+      Stream lastStream = streamEntry.values().getLast();
+      if ((stream.milliseconds() < lastStream.milliseconds())
+          || (stream.milliseconds() == lastStream.milliseconds()
+              && stream.sequence() <= lastStream.sequence())) {
+        throw new IllegalArgumentException(
+            "ERR The ID specified in XADD is equal or smaller than the target stream top item");
+      }
+    }
+
+    streamEntry.values().add(stream);
   }
 
   public String type(String key) {

@@ -1,5 +1,7 @@
 package be.julienpiron.redis;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -18,20 +20,25 @@ class TestClient implements AutoCloseable {
     reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
   }
 
-  public String send(String... args) throws IOException {
+  public String send(String... args) {
     RESPDataType data = new RESP.Array(args);
 
     writer.write(data.encode());
     writer.flush();
 
     char[] response = new char[2048];
-    int length = reader.read(response);
+    int length;
+    try {
+      length = reader.read(response);
+      if (length <= 0) {
+        return null;
+      }
 
-    if (length <= 0) {
+      return new String(response, 0, length);
+    } catch (IOException e) {
+      fail(e);
       return null;
     }
-
-    return new String(response, 0, length);
   }
 
   @Override

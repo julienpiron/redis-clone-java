@@ -28,6 +28,13 @@ public class RESPTest {
   }
 
   @Test
+  void shouldEncodeSimpleError() {
+    RESP.SimpleError simpleError = new RESP.SimpleError("ERR this is an error");
+
+    assertEquals("-ERR this is an error\r\n", simpleError.encode());
+  }
+
+  @Test
   void shouldEncodeArray() {
     RESP.Array array =
         new RESP.Array(List.of(new RESP.SimpleString("Hello"), new RESP.BulkString("world!")));

@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import net.datafaker.Faker;
 import org.junit.jupiter.api.*;
 
@@ -34,231 +37,185 @@ public class MainTest {
   }
 
   @Test
-  void shouldHandlePING() {
-    AtomicReference<String> response = new AtomicReference<>();
-
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server); ) {
-                response.set(client.send("PING"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
-
-    await().atMost(200, MILLISECONDS).until(() -> response.get() != null);
-
-    assertEquals("+PONG\r\n", response.get());
+  void shouldHandlePING() throws Exception {
+    String response = run(client -> client.send("PING"));
+    assertEquals("+PONG\r\n", response);
   }
 
   @Test
-  void shouldHandleMultiplePINGs() {
-    AtomicReference<String> response1 = new AtomicReference<>();
-    AtomicReference<String> response2 = new AtomicReference<>();
+  void shouldHandleMultiplePINGs() throws Exception {
+    List<String> responses =
+        run(
+            client -> {
+              String response1 = client.send("PING");
+              String response2 = client.send("PING");
+              return List.of(response1, response2);
+            });
 
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server); ) {
-                response1.set(client.send("PING"));
-                response2.set(client.send("PING"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
-
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> response1.get() != null && response2.get() != null);
-
-    assertEquals("+PONG\r\n", response1.get());
-    assertEquals("+PONG\r\n", response1.get());
+    assertEquals("+PONG\r\n", responses.get(0));
+    assertEquals("+PONG\r\n", responses.get(1));
   }
 
   @Test
-  void shouldHandleMultipleClients() {
-    AtomicReference<String> response1 = new AtomicReference<>();
-    AtomicReference<String> response2 = new AtomicReference<>();
+  void shouldHandleMultipleClients() throws Exception {
+    String[] responses =
+        run(
+            (client1, client2) -> {
+              return new String[] {client1.send("PING"), client2.send("PING")};
+            });
 
-    new Thread(
-            () -> {
-              try (TestClient client1 = new TestClient(server);
-                  TestClient client2 = new TestClient(server); ) {
-                response1.set(client1.send("PING"));
-                response2.set(client2.send("PING"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
-
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> response1.get() != null && response2.get() != null);
-
-    assertEquals("+PONG\r\n", response1.get());
-    assertEquals("+PONG\r\n", response1.get());
+    assertEquals("+PONG\r\n", responses[0]);
+    assertEquals("+PONG\r\n", responses[1]);
   }
 
   @Test
-  void shouldHandleECHO() {
+  void shouldHandleECHO() throws Exception {
     String payload = faker.hobbit().character();
-    AtomicReference<String> response = new AtomicReference<>();
 
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server); ) {
-                response.set(client.send("ECHO", payload));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
+    String response = run(client -> client.send("ECHO", payload));
 
-    await().atMost(200, MILLISECONDS).until(() -> response.get() != null);
-
-    assertEquals("$" + payload.length() + "\r\n" + payload + "\r\n", response.get());
+    assertEquals("$" + payload.length() + "\r\n" + payload + "\r\n", response);
   }
 
   @Test
-  void shouldHandleSETandGET() {
+  void shouldHandleSETandGET() throws Exception {
     String spell = faker.harryPotter().spell();
 
-    AtomicReference<String> setResponse = new AtomicReference<>();
-    AtomicReference<String> getResponse = new AtomicReference<>();
+    String setResponse = run(client -> client.send("SET", "spell", spell));
+    assertEquals("+OK\r\n", setResponse);
 
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server); ) {
-                setResponse.set(client.send("SET", "spell", spell));
-                getResponse.set(client.send("GET", "spell"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
-
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> setResponse.get() != null && getResponse.get() != null);
-
-    assertEquals("+OK\r\n", setResponse.get());
-    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", getResponse.get());
+    String getResponse = run(client -> client.send("GET", "spell"));
+    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", getResponse);
   }
 
   @Test
-  void shouldHandleSETwithEX() {
+  void shouldHandleSETwithEX() throws Exception {
     String spell = faker.harryPotter().spell();
 
-    AtomicReference<String> setResponse = new AtomicReference<>();
-    AtomicReference<String> responseBeforeExpiry = new AtomicReference<>();
-    AtomicReference<String> responseAfterExpiry = new AtomicReference<>();
+    String setResponse = run(client -> client.send("SET", "spell", spell, "EX", "2.5"));
+    assertEquals("+OK\r\n", setResponse);
 
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server); ) {
-                setResponse.set(client.send("SET", "spell", spell, "EX", "2.5"));
-                server.advanceClock(Duration.ofSeconds(2));
-                responseBeforeExpiry.set(client.send("GET", "spell"));
-                server.advanceClock(Duration.ofSeconds(1));
-                responseAfterExpiry.set(client.send("GET", "spell"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
+    server.advanceClock(Duration.ofSeconds(2));
+    String responseBeforeExpiry = run(client -> client.send("GET", "spell"));
+    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry);
 
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> responseBeforeExpiry.get() != null && responseAfterExpiry.get() != null);
-
-    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry.get());
-    assertEquals("$-1\r\n", responseAfterExpiry.get());
+    server.advanceClock(Duration.ofSeconds(1));
+    String responseAfterExpiry = run(client -> client.send("GET", "spell"));
+    assertEquals("$-1\r\n", responseAfterExpiry);
   }
 
   @Test
-  void shouldHandleSETwithPX() {
+  void shouldHandleSETwithPX() throws Exception {
     String spell = faker.harryPotter().spell();
 
-    AtomicReference<String> setResponse = new AtomicReference<>();
-    AtomicReference<String> responseBeforeExpiry = new AtomicReference<>();
-    AtomicReference<String> responseAfterExpiry = new AtomicReference<>();
+    String setResponse = run(client -> client.send("SET", "spell", spell, "PX", "500"));
+    assertEquals("+OK\r\n", setResponse);
 
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server); ) {
-                setResponse.set(client.send("SET", "spell", spell, "PX", "500"));
-                server.advanceClock(Duration.ofMillis(200));
-                responseBeforeExpiry.set(client.send("GET", "spell"));
-                server.advanceClock(Duration.ofMillis(400));
-                responseAfterExpiry.set(client.send("GET", "spell"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
+    server.advanceClock(Duration.ofMillis(200));
+    String responseBeforeExpiry = run(client -> client.send("GET", "spell"));
+    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry);
 
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> responseBeforeExpiry.get() != null && responseAfterExpiry.get() != null);
-
-    assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry.get());
-    assertEquals("$-1\r\n", responseAfterExpiry.get());
+    server.advanceClock(Duration.ofMillis(400));
+    String responseAfterExpiry = run(client -> client.send("GET", "spell"));
+    assertEquals("$-1\r\n", responseAfterExpiry);
   }
 
   @Test
-  void shouldHandleTYPE() {
+  void shouldHandleTYPE() throws Exception {
     String character = faker.harryPotter().character();
 
-    AtomicReference<String> response1 = new AtomicReference<>();
-    AtomicReference<String> response2 = new AtomicReference<>();
+    run(client -> client.send("SET", "favourite_character", character));
+    assertEquals("+string\r\n", run(client -> client.send("TYPE", "favourite_character")));
 
-    new Thread(
-            () -> {
-              try (TestClient client = new TestClient(server)) {
-                client.send("SET", "favourite_character", character);
-                response1.set(client.send("TYPE", "favourite_character"));
-                response2.set(client.send("TYPE", "missing_key"));
-              } catch (Exception e) {
-                fail(e);
-              }
-            })
-        .start();
+    String response2 = run(client -> client.send("TYPE", "missing_key"));
+    assertEquals("+none\r\n", response2);
 
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> response1.get() != null && response2.get() != null);
-
-    assertEquals("+string\r\n", response1.get());
-    assertEquals("+none\r\n", response2.get());
+    run(client -> client.send("XADD", "ennemies", "0-1", "name", character));
+    assertEquals("+stream\r\n", run(client -> client.send("TYPE", "ennemies")));
   }
 
   @Test
-  void shouldHandleXADD() {
+  void shouldHandleXADD() throws Exception {
     String title = faker.harryPotter().book();
     String pages = Integer.toString(faker.number().numberBetween(100, 999));
 
-    AtomicReference<String> xaddResponse = new AtomicReference<>();
-    AtomicReference<String> typeResponse = new AtomicReference<>();
+    assertEquals(
+        "$3\r\n0-1\r\n",
+        run(client -> client.send("XADD", "books", "0-1", "title", title, "pages", pages)));
 
-    new Thread(
+    assertEquals("+stream\r\n", run(client -> client.send("TYPE", "books")));
+  }
+
+  @Test
+  void shouldReject00StreamID() throws Exception {
+    String title = faker.harryPotter().book();
+    String pages = Integer.toString(faker.number().numberBetween(100, 999));
+
+    assertEquals(
+        "-ERR The ID specified in XADD must be greater than 0-0\r\n",
+        run(client -> client.send("XADD", "books", "0-0", "title", title, "pages", pages)));
+  }
+
+  @Test
+  void shouldOnlyAcceptIncrementalStreamIDs() throws Exception {
+    assertEquals(
+        "$3\r\n1-1\r\n",
+        run(
+            client ->
+                client.send(
+                    "XADD", "books", "1-1", "title", "Philosopher's Stone", "year", "1997")));
+
+    assertEquals(
+        "$3\r\n1-2\r\n",
+        run(
+            client ->
+                client.send(
+                    "XADD", "books", "1-2", "title", "Chamber of Secrets", "year", "1998")));
+
+    // The exact time and sequence number as the last entryThe exact time and sequence number as the
+    // last entry
+    assertEquals(
+        "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
+        run(
+            client ->
+                client.send(
+                    "XADD", "books", "1-2", "title", "Chamber of Secrets", "year", "1998")));
+
+    // A smaller value for the time and a larger value for the sequence number
+    assertEquals(
+        "-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
+        run(
+            client ->
+                client.send(
+                    "XADD", "books", "0-3", "title", "Prisoner of Azkaban", "year", "1999")));
+  }
+
+  private <T> T run(Function<TestClient, T> action) throws Exception {
+    CompletableFuture<T> future =
+        CompletableFuture.supplyAsync(
             () -> {
               try (TestClient client = new TestClient(server)) {
-                xaddResponse.set(
-                    client.send("XADD", "books", "0-1", "title", title, "pages", pages));
-                typeResponse.set(client.send("TYPE", "books"));
+                return action.apply(client);
               } catch (Exception e) {
-                fail(e);
+                throw new RuntimeException(e);
               }
-            })
-        .start();
+            });
 
-    await()
-        .atMost(200, MILLISECONDS)
-        .until(() -> xaddResponse.get() != null && typeResponse.get() != null);
+    return future.get(200, MILLISECONDS);
+  }
 
-    assertEquals("$3\r\n0-1\r\n", xaddResponse.get());
-    assertEquals("+stream\r\n", typeResponse.get());
+  private <T> T run(BiFunction<TestClient, TestClient, T> action) throws Exception {
+    CompletableFuture<T> future =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try (TestClient client1 = new TestClient(server);
+                  TestClient client2 = new TestClient(server); ) {
+                return action.apply(client1, client2);
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+            });
+
+    return future.get(200, MILLISECONDS);
   }
 }

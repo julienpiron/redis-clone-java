@@ -3,7 +3,6 @@ package be.julienpiron.redis;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,17 +82,26 @@ public class RequestHandler {
   }
 
   private RESPDataType xadd() throws InvalidRequestException {
-    String key = request.argAsString(0);
-    String id = request.argAsString(1);
+    try {
 
-    Map<String, String> entries = new HashMap<>();
+      String key = request.argAsString(0);
+      String id = request.argAsString(1);
 
-    for (int i = 2; i + 1 < request.args().size(); i += 2) {
-      entries.put(request.argAsString(i), request.argAsString(i + 1));
+      String[] idParts = id.split("-");
+      long milliseconds = Long.parseLong(idParts[0]);
+      int sequence = Integer.parseInt(idParts[1]);
+
+      Map<String, String> value = new HashMap<>();
+
+      for (int i = 2; i + 1 < request.args().size(); i += 2) {
+        value.put(request.argAsString(i), request.argAsString(i + 1));
+      }
+
+      store.setStream(key, new Stream(milliseconds, sequence, value));
+
+      return new RESP.BulkString(id);
+    } catch (IllegalArgumentException e) {
+      return new RESP.SimpleError(e.getMessage());
     }
-
-    store.setStream(key, new LinkedHashMap<>(Map.of(id, entries)));
-
-    return new RESP.BulkString(id);
   }
 }
