@@ -96,13 +96,16 @@ public class RequestHandler {
 
   private RESPDataType xrange() throws InvalidRequestException {
     String key = request.argAsString(0);
-    Stream.ID from = Stream.ID.parse(request.argAsString(1), store.clock);
+    Stream.ID from =
+        request.argAsString(1).equals("-")
+            ? null
+            : Stream.ID.parse(request.argAsString(1), store.clock);
     Stream.ID to = Stream.ID.parse(request.argAsString(2), store.clock);
 
     List<RESPDataType> filteredStreams = new ArrayList<>();
 
     for (Stream stream : store.getStream(key)) {
-      if (stream.id().compareTo(from) < 0) {
+      if (from != null && stream.id().compareTo(from) < 0) {
         continue;
       }
       if (to.compareTo(stream.id()) < 0) {
