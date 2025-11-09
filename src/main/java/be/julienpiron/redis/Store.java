@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 public class Store {
   private final ConcurrentHashMap<String, StoreEntry> map;
   private final Logger logger = LoggerFactory.getLogger(Store.class);
-  protected Clock clock;
+  protected volatile Clock clock;
 
   public Store() {
     this(Clock.systemDefaultZone());

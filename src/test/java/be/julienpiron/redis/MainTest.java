@@ -153,12 +153,14 @@ public class MainTest {
 
   @Test
   void shouldReject00StreamID() throws Exception {
-    String title = faker.harryPotter().book();
-    String pages = Integer.toString(faker.number().numberBetween(100, 999));
-
     assertEquals(
         "-ERR The ID specified in XADD must be greater than 0-0\r\n",
-        run(client -> client.send("XADD", "books", "0-0", "title", title, "pages", pages)));
+        run(client -> client.send("XADD", "books", "0-0", "title", "Deathly Hallows")));
+
+    run(client -> client.send("XADD", "moovie", "0-1", "title", "Deathly Hallows"));
+    assertEquals(
+        "-ERR The ID specified in XADD must be greater than 0-0\r\n",
+        run(client -> client.send("XADD", "moovie", "0-0", "title", "Deathly Hallows")));
   }
 
   @Test
@@ -223,7 +225,9 @@ public class MainTest {
     assertEquals(
         "$14\r\n852033600000-1\r\n",
         run(client -> client.send("XADD", "key", "*", "place", faker.harryPotter().location())));
+
     store.advanceClock(Duration.ofSeconds(10));
+
     assertEquals(
         "$14\r\n852033610000-0\r\n",
         run(client -> client.send("XADD", "key", "*", "place", faker.harryPotter().location())));

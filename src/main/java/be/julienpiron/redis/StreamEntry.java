@@ -27,10 +27,9 @@ public record StreamEntry(LinkedList<Stream> values) implements StoreEntry {
   }
 
   private Stream.ID validateID(String input, Clock clock) {
-    Optional<Stream> last = getLast();
-
     if (input.equals("*")) {
-      return last.isPresent() ? new Stream.ID(clock, last.get().id()) : new Stream.ID(clock);
+      long milliseconds = clock.instant().toEpochMilli();
+      return new Stream.ID(milliseconds, nextSequence(milliseconds), getLastID());
     }
 
     Pattern pattern = Pattern.compile("(?<milliseconds>[0-9]+)-(?<sequence>[0-9]+|\\*)");
@@ -43,23 +42,29 @@ public record StreamEntry(LinkedList<Stream> values) implements StoreEntry {
     long milliseconds = Long.parseLong(matcher.group("milliseconds"));
 
     if (matcher.group("sequence").equals("*")) {
-      return last.isPresent()
-          ? new Stream.ID(milliseconds, last.get().id())
-          : new Stream.ID(milliseconds);
+      return new Stream.ID(milliseconds, nextSequence(milliseconds), getLastID());
     }
 
     long sequence = Long.parseLong(matcher.group("sequence"));
 
-    return last.isPresent()
-        ? new Stream.ID(milliseconds, sequence, last.get().id())
-        : new Stream.ID(milliseconds, sequence);
+    return new Stream.ID(milliseconds, sequence, getLastID());
   }
 
-  private Optional<Stream> getLast() {
+  private Optional<Stream.ID> getLastID() {
     try {
-      return Optional.of(values.getLast());
+      return Optional.of(values.getLast().id());
     } catch (NoSuchElementException _) {
       return Optional.empty();
     }
+  }
+
+  private long nextSequence(long milliseconds) {
+    Optional<Stream.ID> lastID = getLastID();
+
+    if (lastID.isPresent() && milliseconds == lastID.get().milliseconds()) {
+      return lastID.get().sequence() + 1;
+    }
+
+    return milliseconds == 0 ? 1 : 0;
   }
 }
