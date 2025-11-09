@@ -12,6 +12,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import net.datafaker.Faker;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 public class MainTest {
   private TestServer server;
@@ -188,6 +190,26 @@ public class MainTest {
             client ->
                 client.send(
                     "XADD", "books", "0-3", "title", "Prisoner of Azkaban", "year", "1999")));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"'0-*', '$3\r\n0-1\r\n'", "'9-*', '$3\r\n9-0\r\n'"})
+  void shouldAutoGenerateStreamIDSequenceWhenCreatingStream(String partialID, String generatedID)
+      throws Exception {
+    assertEquals(
+        generatedID,
+        run(client -> client.send("XADD", faker.harryPotter().house(), partialID, "foo", "bar")));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"'1997-*', '$6\r\n1997-3\r\n'", "'2000-*', '$6\r\n2000-0\r\n'"})
+  void shouldAutoGenerateStreamIDSequenceWhenAddingToAnExistingStream(
+      String partialID, String generatedID) throws Exception {
+    String key = faker.harryPotter().location();
+
+    run(client -> client.send("XADD", key, "1997-2", "foo", "bar"));
+
+    assertEquals(generatedID, run(client -> client.send("XADD", key, partialID, "foo", "bar")));
   }
 
   private <T> T run(Function<TestClient, T> action) throws Exception {

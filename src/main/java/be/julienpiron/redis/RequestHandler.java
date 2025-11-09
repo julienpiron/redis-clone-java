@@ -87,19 +87,15 @@ public class RequestHandler {
       String key = request.argAsString(0);
       String id = request.argAsString(1);
 
-      String[] idParts = id.split("-");
-      long milliseconds = Long.parseLong(idParts[0]);
-      int sequence = Integer.parseInt(idParts[1]);
-
-      Map<String, String> value = new HashMap<>();
+      Map<String, String> values = new HashMap<>();
 
       for (int i = 2; i + 1 < request.args().size(); i += 2) {
-        value.put(request.argAsString(i), request.argAsString(i + 1));
+        values.put(request.argAsString(i), request.argAsString(i + 1));
       }
 
-      store.setStream(key, new Stream(milliseconds, sequence, value));
+      String generatedId = store.setStream(key, id, values);
 
-      return new RESP.BulkString(id);
+      return new RESP.BulkString(generatedId);
     } catch (IllegalArgumentException e) {
       return new RESP.SimpleError(e.getMessage());
     }
