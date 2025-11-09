@@ -16,16 +16,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 public class MainTest {
+  private TestStore store;
   private TestServer server;
   private Thread serverThread;
   private Faker faker = new Faker();
 
   @BeforeEach
   void startServer() throws IOException {
+    store = new TestStore();
     server = new TestServer();
     serverThread =
         new Thread(
             () -> {
+              server.setStore(store);
               server.start();
             });
     serverThread.start();
@@ -97,11 +100,11 @@ public class MainTest {
     String setResponse = run(client -> client.send("SET", "spell", spell, "EX", "2.5"));
     assertEquals("+OK\r\n", setResponse);
 
-    server.advanceClock(Duration.ofSeconds(2));
+    store.advanceClock(Duration.ofSeconds(2));
     String responseBeforeExpiry = run(client -> client.send("GET", "spell"));
     assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry);
 
-    server.advanceClock(Duration.ofSeconds(1));
+    store.advanceClock(Duration.ofSeconds(1));
     String responseAfterExpiry = run(client -> client.send("GET", "spell"));
     assertEquals("$-1\r\n", responseAfterExpiry);
   }
@@ -113,11 +116,11 @@ public class MainTest {
     String setResponse = run(client -> client.send("SET", "spell", spell, "PX", "500"));
     assertEquals("+OK\r\n", setResponse);
 
-    server.advanceClock(Duration.ofMillis(200));
+    store.advanceClock(Duration.ofMillis(200));
     String responseBeforeExpiry = run(client -> client.send("GET", "spell"));
     assertEquals("$" + spell.length() + "\r\n" + spell + "\r\n", responseBeforeExpiry);
 
-    server.advanceClock(Duration.ofMillis(400));
+    store.advanceClock(Duration.ofMillis(400));
     String responseAfterExpiry = run(client -> client.send("GET", "spell"));
     assertEquals("$-1\r\n", responseAfterExpiry);
   }
@@ -210,6 +213,20 @@ public class MainTest {
     run(client -> client.send("XADD", key, "1997-2", "foo", "bar"));
 
     assertEquals(generatedID, run(client -> client.send("XADD", key, partialID, "foo", "bar")));
+  }
+
+  @Test
+  void shouldAutoGenerateStreamID() throws Exception {
+    assertEquals(
+        "$14\r\n852033600000-0\r\n",
+        run(client -> client.send("XADD", "key", "*", "place", faker.harryPotter().location())));
+    assertEquals(
+        "$14\r\n852033600000-1\r\n",
+        run(client -> client.send("XADD", "key", "*", "place", faker.harryPotter().location())));
+    store.advanceClock(Duration.ofSeconds(10));
+    assertEquals(
+        "$14\r\n852033610000-0\r\n",
+        run(client -> client.send("XADD", "key", "*", "place", faker.harryPotter().location())));
   }
 
   private <T> T run(Function<TestClient, T> action) throws Exception {

@@ -6,7 +6,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.time.Clock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,12 +15,10 @@ public class Server {
   protected boolean running;
   protected ServerSocket serverSocket;
   protected Store store;
-  protected Clock clock;
 
   public Server(int port) {
     this.port = port;
     this.store = new Store();
-    this.clock = Clock.systemDefaultZone();
   }
 
   public void start() {
@@ -53,7 +50,7 @@ public class Server {
       while ((request = reader.read()) != null) {
         logger.debug("Request: {}", request);
         try {
-          RequestHandler handler = new RequestHandler(request, store, clock);
+          RequestHandler handler = new RequestHandler(request, store);
 
           RESPDataType response = handler.handle();
           logger.debug("Response: {}", response);
@@ -95,9 +92,5 @@ public class Server {
 
   public boolean isRunning() {
     return running;
-  }
-
-  public Clock getClock() {
-    return clock;
   }
 }

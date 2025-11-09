@@ -1,76 +1,32 @@
 package be.julienpiron.redis;
 
 import java.time.Clock;
-import java.time.Instant;
-import java.util.LinkedList;
+import java.time.Duration;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-interface Entry {
-  String type();
-}
-
-record StringEntry(String value, Optional<Instant> expiry) implements Entry {
-  boolean isExpired(Clock clock) {
-    if (expiry.isEmpty()) {
-      return false;
-    }
-
-    return Instant.now(clock).isAfter(expiry.get());
-  }
-
-  @Override
-  public String type() {
-    return "string";
-  }
-}
-
-record StreamEntry(LinkedList<Stream> values) implements Entry {
-  public StreamEntry() {
-    this(new LinkedList<>());
-  }
-
-  @Override
-  public String type() {
-    return "stream";
-  }
-
-  public long generateSequence(long milliseconds) {
-    try {
-      Stream last = values.getLast();
-
-      if (milliseconds == last.milliseconds()) {
-        return last.sequence() + 1;
-      }
-
-      return 0;
-    } catch (NoSuchElementException _) {
-      if (milliseconds == 0) {
-        return 1;
-      }
-      return 0;
-    }
-  }
-}
-
 public class Store {
-  private final ConcurrentHashMap<String, Entry> map;
+  private final ConcurrentHashMap<String, StoreEntry> map;
   private final Logger logger = LoggerFactory.getLogger(Store.class);
+  protected Clock clock;
 
   public Store() {
-    map = new ConcurrentHashMap<>();
+    this(Clock.systemDefaultZone());
   }
 
-  public String getString(String key, Clock clock) {
-    logger.debug("Getting: " + key);
+  protected Store(Clock clock) {
+    map = new ConcurrentHashMap<>();
+    this.clock = clock;
+  }
 
-    Entry entry = map.get(key);
+  public String getString(String key) {
+    logger.debug(clock.instant().toString());
+    logger.debug("Getting: {}", key);
+
+    StoreEntry entry = map.get(key);
 
     logger.debug("Got: " + entry);
 
@@ -91,52 +47,25 @@ public class Store {
     map.put(key, new StringEntry(value, Optional.empty()));
   }
 
-  public void setString(String key, String value, Instant expiry) {
-    map.put(key, new StringEntry(value, Optional.of(expiry)));
+  public void setString(String key, String value, Duration expiry) {
+    map.put(key, new StringEntry(value, Optional.of(clock.instant().plus(expiry))));
   }
 
   public String setStream(String key, String id, Map<String, String> values) {
     map.putIfAbsent(key, new StreamEntry());
 
-    Entry entry = map.get(key);
+    StoreEntry entry = map.get(key);
 
     if (!(entry instanceof StreamEntry streamEntry))
       throw new IllegalArgumentException(key + " is not a stream");
 
-    Pattern idPattern = Pattern.compile("(?<milliseconds>[0-9]+)-(?<sequence>[0-9]+|\\*)");
-    Matcher matcher = idPattern.matcher(id);
+    String generatedID = streamEntry.add(id, values, clock).toString();
 
-    if (!matcher.matches()) {
-      throw new IllegalArgumentException("ERR Invalid stream ID");
-    }
-
-    long milliseconds = Long.parseLong(matcher.group("milliseconds"));
-
-    String sequenceGroup = matcher.group("sequence");
-    long sequence =
-        sequenceGroup.equals("*")
-            ? streamEntry.generateSequence(milliseconds)
-            : Long.parseLong(sequenceGroup);
-
-    Stream newStream = new Stream(milliseconds, sequence, values);
-
-    if (!streamEntry.values().isEmpty()) {
-      Stream lastStream = streamEntry.values().getLast();
-      if ((newStream.milliseconds() < lastStream.milliseconds())
-          || (newStream.milliseconds() == lastStream.milliseconds()
-              && newStream.sequence() <= lastStream.sequence())) {
-        throw new IllegalArgumentException(
-            "ERR The ID specified in XADD is equal or smaller than the target stream top item");
-      }
-    }
-
-    streamEntry.values().add(newStream);
-
-    return newStream.id();
+    return generatedID;
   }
 
   public String type(String key) {
-    Entry entry = map.get(key);
+    StoreEntry entry = map.get(key);
 
     if (entry == null) return "none";
 

@@ -1,7 +1,6 @@
 package be.julienpiron.redis;
 
-import java.time.Clock;
-import java.time.Instant;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -11,12 +10,10 @@ public class RequestHandler {
   private Logger logger = LoggerFactory.getLogger(RequestHandler.class);
   private Request request;
   private Store store;
-  private Clock clock;
 
-  public RequestHandler(Request request, Store store, Clock clock) {
+  public RequestHandler(Request request, Store store) {
     this.request = request;
     this.store = store;
-    this.clock = clock;
   }
 
   public RESPDataType handle() throws InvalidRequestException {
@@ -38,7 +35,7 @@ public class RequestHandler {
   }
 
   private RESPDataType get() throws InvalidRequestException {
-    String value = store.getString(request.argAsString(0), clock);
+    String value = store.getString(request.argAsString(0));
 
     if (value == null) return new RESP.BulkString(null);
 
@@ -74,8 +71,8 @@ public class RequestHandler {
         key,
         value,
         switch (expiryType) {
-          case EX -> Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000_000));
-          case PX -> Instant.now(clock).plusNanos((long) (expiryOffset * 1_000_000));
+          case EX -> Duration.ofNanos((long) (expiryOffset * 1_000_000_000));
+          case PX -> Duration.ofNanos((long) (expiryOffset * 1_000_000));
         });
 
     return new RESP.SimpleString("OK");
@@ -83,7 +80,6 @@ public class RequestHandler {
 
   private RESPDataType xadd() throws InvalidRequestException {
     try {
-
       String key = request.argAsString(0);
       String id = request.argAsString(1);
 
