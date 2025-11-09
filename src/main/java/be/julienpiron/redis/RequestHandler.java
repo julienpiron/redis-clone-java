@@ -100,7 +100,10 @@ public class RequestHandler {
         request.argAsString(1).equals("-")
             ? null
             : Stream.ID.parse(request.argAsString(1), store.clock);
-    Stream.ID to = Stream.ID.parse(request.argAsString(2), store.clock);
+    Stream.ID to =
+        request.argAsString(2).equals("+")
+            ? null
+            : Stream.ID.parse(request.argAsString(2), store.clock);
 
     List<RESPDataType> filteredStreams = new ArrayList<>();
 
@@ -108,7 +111,7 @@ public class RequestHandler {
       if (from != null && stream.id().compareTo(from) < 0) {
         continue;
       }
-      if (to.compareTo(stream.id()) < 0) {
+      if (to != null && to.compareTo(stream.id()) < 0) {
         break;
       }
 
