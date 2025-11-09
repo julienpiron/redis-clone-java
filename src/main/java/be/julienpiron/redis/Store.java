@@ -2,7 +2,7 @@ package be.julienpiron.redis;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -51,7 +51,21 @@ public class Store {
     map.put(key, new StringEntry(value, Optional.of(clock.instant().plus(expiry))));
   }
 
-  public String setStream(String key, String id, Map<String, String> values) {
+  public List<Stream> getStream(String key) {
+    logger.debug("Getting: {}", key);
+
+    StoreEntry entry = map.get(key);
+
+    logger.debug("Got: " + entry);
+
+    if (!(entry instanceof StreamEntry streamEntry)) {
+      return null;
+    }
+
+    return streamEntry.getValues();
+  }
+
+  public String setStream(String key, String id, List<String> values) {
     map.putIfAbsent(key, new StreamEntry());
 
     StoreEntry entry = map.get(key);

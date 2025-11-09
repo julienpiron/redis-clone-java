@@ -1,8 +1,9 @@
 package be.julienpiron.redis;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +27,7 @@ public class RequestHandler {
       case "TYPE" -> type();
       case "SET" -> set();
       case "XADD" -> xadd();
+      case "XRANGE" -> xrange();
       default -> throw new InvalidRequestException("Unknown command: " + request.command());
     };
   }
@@ -83,17 +85,40 @@ public class RequestHandler {
       String key = request.argAsString(0);
       String id = request.argAsString(1);
 
-      Map<String, String> values = new HashMap<>();
-
-      for (int i = 2; i + 1 < request.args().size(); i += 2) {
-        values.put(request.argAsString(i), request.argAsString(i + 1));
-      }
-
-      String generatedId = store.setStream(key, id, values);
+      String generatedId =
+          store.setStream(key, id, request.args().subList(2, request.args().size()));
 
       return new RESP.BulkString(generatedId);
     } catch (IllegalArgumentException e) {
       return new RESP.SimpleError(e.getMessage());
     }
+  }
+
+  private RESPDataType xrange() throws InvalidRequestException {
+    String key = request.argAsString(0);
+    Stream.ID from = Stream.ID.parse(request.argAsString(1), store.clock);
+    Stream.ID to = Stream.ID.parse(request.argAsString(2), store.clock);
+
+    List<RESPDataType> filteredStreams = new ArrayList<>();
+
+    for (Stream stream : store.getStream(key)) {
+      if (stream.id().compareTo(from) < 0) {
+        continue;
+      }
+      if (to.compareTo(stream.id()) < 0) {
+        break;
+      }
+
+      filteredStreams.add(
+          new RESP.Array(
+              List.of(
+                  new RESP.BulkString(stream.id().toString()),
+                  new RESP.Array(
+                      stream.values().stream()
+                          .map(RESP.BulkString::new)
+                          .collect(Collectors.toList())))));
+    }
+
+    return new RESP.Array(filteredStreams);
   }
 }

@@ -233,6 +233,46 @@ public class MainTest {
         run(client -> client.send("XADD", "key", "*", "place", faker.harryPotter().location())));
   }
 
+  @Test
+  void shouldHandleXRANGE() throws Exception {
+    run(
+        client ->
+            client.send(
+                "XADD", "some_key", "1526985054069-0", "temperature", "36", "humidity", "95"));
+    run(
+        client ->
+            client.send(
+                "XADD", "some_key", "1526985054069-1", "temperature", "36", "humidity", "95"));
+    run(
+        client ->
+            client.send(
+                "XADD", "some_key", "1526985054079-0", "temperature", "37", "humidity", "94"));
+    run(
+        client ->
+            client.send(
+                "XADD", "some_key", "1526985054089-0", "temperature", "37", "humidity", "94"));
+    String response =
+        run(client -> client.send("XRANGE", "some_key", "1526985054069-1", "1526985054079"));
+
+    assertEquals(
+        "*2\r\n"
+            + "*2\r\n"
+            + "$15\r\n1526985054069-1\r\n"
+            + "*4\r\n"
+            + "$11\r\ntemperature\r\n"
+            + "$2\r\n36\r\n"
+            + "$8\r\nhumidity\r\n"
+            + "$2\r\n95\r\n"
+            + "*2\r\n"
+            + "$15\r\n1526985054079-0\r\n"
+            + "*4\r\n"
+            + "$11\r\ntemperature\r\n"
+            + "$2\r\n37\r\n"
+            + "$8\r\nhumidity\r\n"
+            + "$2\r\n94\r\n",
+        response);
+  }
+
   private <T> T run(Function<TestClient, T> action) throws Exception {
     CompletableFuture<T> future =
         CompletableFuture.supplyAsync(
