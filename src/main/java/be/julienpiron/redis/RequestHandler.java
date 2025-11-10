@@ -132,30 +132,38 @@ public class RequestHandler {
   }
 
   private RESPDataType xread() throws InvalidRequestException {
-    String key = request.argAsString(1);
-    StreamEntry entry = store.getStream(key);
+    int numberOfStreams = (request.args().size() - 1) / 2;
 
-    Stream.ID from = entry.parseID(request.argAsString(2), store.clock);
+    logger.debug("Number of streams: {}", numberOfStreams);
 
-    List<RESPDataType> filteredStreams = new ArrayList<>();
+    List<RESPDataType> result = new ArrayList<>();
 
-    for (Stream stream : entry.getValues()) {
-      if (stream.id().compareTo(from) < 1) {
-        continue;
+    for (int i = 1; i <= numberOfStreams; i++) {
+      String key = request.argAsString(i);
+      StreamEntry entry = store.getStream(key);
+
+      Stream.ID from = entry.parseID(request.argAsString(i + numberOfStreams), store.clock);
+
+      List<RESPDataType> filteredStreams = new ArrayList<>();
+
+      for (Stream stream : entry.getValues()) {
+        if (stream.id().compareTo(from) < 1) {
+          continue;
+        }
+
+        filteredStreams.add(
+            new RESP.Array(
+                List.of(
+                    new RESP.BulkString(stream.id().toString()),
+                    new RESP.Array(
+                        stream.values().stream()
+                            .map(RESP.BulkString::new)
+                            .collect(Collectors.toList())))));
       }
 
-      filteredStreams.add(
-          new RESP.Array(
-              List.of(
-                  new RESP.BulkString(stream.id().toString()),
-                  new RESP.Array(
-                      stream.values().stream()
-                          .map(RESP.BulkString::new)
-                          .collect(Collectors.toList())))));
+      result.add(
+          new RESP.Array(List.of(new RESP.BulkString(key), new RESP.Array(filteredStreams))));
     }
-
-    return new RESP.Array(
-        List.of(
-            new RESP.Array(List.of(new RESP.BulkString(key), new RESP.Array(filteredStreams)))));
+    return new RESP.Array(result);
   }
 }

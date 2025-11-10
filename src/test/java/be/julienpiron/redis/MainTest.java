@@ -4,6 +4,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
+import be.julienpiron.redis.RESP.BulkString;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -361,6 +362,55 @@ public class MainTest {
             + "$2\r\n37\r\n"
             + "$8\r\nhumidity\r\n"
             + "$2\r\n94\r\n",
+        response);
+  }
+
+  @Test
+  void shouldHandleXREADWithMultipleKeys() throws Exception {
+    String key1 = faker.lordOfTheRings().location();
+    String temperature1 = Integer.toString(faker.number().numberBetween(0, 100));
+
+    String key2 = faker.lordOfTheRings().location();
+    String temperature2 = Integer.toString(faker.number().numberBetween(0, 100));
+
+    run(
+        client -> {
+          client.send("XADD", key1, "0-1", "temperature", temperature1);
+          client.send("XADD", key2, "0-0", "temperature", temperature2);
+          client.send("XADD", key2, "0-1", "temperature", temperature2);
+          return client.send("XADD", key2, "0-2", "temperature", temperature2);
+        });
+
+    String response = run(client -> client.send("XREAD", "STREAMS", key1, key2, "0-0", "0-1"));
+
+    assertEquals(
+        new RESP.Array(
+                List.of(
+                    new RESP.Array(
+                        List.of(
+                            new BulkString(key1),
+                            new RESP.Array(
+                                List.of(
+                                    new RESP.Array(
+                                        List.of(
+                                            new RESP.BulkString("0-1"),
+                                            new RESP.Array(
+                                                List.of(
+                                                    new RESP.BulkString("temperature"),
+                                                    new RESP.BulkString(temperature1))))))))),
+                    new RESP.Array(
+                        List.of(
+                            new BulkString(key2),
+                            new RESP.Array(
+                                List.of(
+                                    new RESP.Array(
+                                        List.of(
+                                            new RESP.BulkString("0-2"),
+                                            new RESP.Array(
+                                                List.of(
+                                                    new RESP.BulkString("temperature"),
+                                                    new RESP.BulkString(temperature2)))))))))))
+            .encode(),
         response);
   }
 
