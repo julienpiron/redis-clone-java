@@ -28,6 +28,7 @@ public class RequestHandler {
       case "SET" -> set();
       case "XADD" -> xadd();
       case "XRANGE" -> xrange();
+      case "XREAD" -> xread();
       default -> throw new InvalidRequestException("Unknown command: " + request.command());
     };
   }
@@ -96,6 +97,7 @@ public class RequestHandler {
 
   private RESPDataType xrange() throws InvalidRequestException {
     String key = request.argAsString(0);
+
     Stream.ID from =
         request.argAsString(1).equals("-")
             ? null
@@ -126,5 +128,31 @@ public class RequestHandler {
     }
 
     return new RESP.Array(filteredStreams);
+  }
+
+  private RESPDataType xread() throws InvalidRequestException {
+    String key = request.argAsString(1);
+    Stream.ID from = Stream.ID.parse(request.argAsString(2), store.clock);
+
+    List<RESPDataType> filteredStreams = new ArrayList<>();
+
+    for (Stream stream : store.getStream(key)) {
+      if (stream.id().compareTo(from) < 1) {
+        continue;
+      }
+
+      filteredStreams.add(
+          new RESP.Array(
+              List.of(
+                  new RESP.BulkString(stream.id().toString()),
+                  new RESP.Array(
+                      stream.values().stream()
+                          .map(RESP.BulkString::new)
+                          .collect(Collectors.toList())))));
+    }
+
+    return new RESP.Array(
+        List.of(
+            new RESP.Array(List.of(new RESP.BulkString(key), new RESP.Array(filteredStreams)))));
   }
 }
