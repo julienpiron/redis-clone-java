@@ -51,18 +51,17 @@ public class Store {
     map.put(key, new StringEntry(value, Optional.of(clock.instant().plus(expiry))));
   }
 
-  public List<Stream> getStream(String key) {
+  public StreamEntry getStream(String key) {
     logger.debug("Getting: {}", key);
 
     StoreEntry entry = map.get(key);
 
     logger.debug("Got: " + entry);
 
-    if (!(entry instanceof StreamEntry streamEntry)) {
-      return null;
-    }
+    if (!(entry instanceof StreamEntry streamEntry))
+      throw new IllegalArgumentException(key + " is not a stream");
 
-    return streamEntry.getValues();
+    return streamEntry;
   }
 
   public String setStream(String key, String id, List<String> values) {

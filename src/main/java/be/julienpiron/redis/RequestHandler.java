@@ -97,19 +97,20 @@ public class RequestHandler {
 
   private RESPDataType xrange() throws InvalidRequestException {
     String key = request.argAsString(0);
+    StreamEntry entry = store.getStream(key);
 
     Stream.ID from =
         request.argAsString(1).equals("-")
             ? null
-            : Stream.ID.parse(request.argAsString(1), store.clock);
+            : entry.parseID(request.argAsString(1), store.clock);
     Stream.ID to =
         request.argAsString(2).equals("+")
             ? null
-            : Stream.ID.parse(request.argAsString(2), store.clock);
+            : entry.parseID(request.argAsString(2), store.clock);
 
     List<RESPDataType> filteredStreams = new ArrayList<>();
 
-    for (Stream stream : store.getStream(key)) {
+    for (Stream stream : entry.getValues()) {
       if (from != null && stream.id().compareTo(from) < 0) {
         continue;
       }
@@ -132,11 +133,13 @@ public class RequestHandler {
 
   private RESPDataType xread() throws InvalidRequestException {
     String key = request.argAsString(1);
-    Stream.ID from = Stream.ID.parse(request.argAsString(2), store.clock);
+    StreamEntry entry = store.getStream(key);
+
+    Stream.ID from = entry.parseID(request.argAsString(2), store.clock);
 
     List<RESPDataType> filteredStreams = new ArrayList<>();
 
-    for (Stream stream : store.getStream(key)) {
+    for (Stream stream : entry.getValues()) {
       if (stream.id().compareTo(from) < 1) {
         continue;
       }

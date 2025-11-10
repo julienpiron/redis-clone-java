@@ -345,15 +345,9 @@ public class MainTest {
 
   @Test
   void shouldHandleXREAD() throws Exception {
-    run(
-        client ->
-            client.send(
-                "XADD", "some_key", "1526985054069-0", "temperature", "36", "humidity", "95"));
-    run(
-        client ->
-            client.send(
-                "XADD", "some_key", "1526985054079-0", "temperature", "37", "humidity", "94"));
-    String response = run(client -> client.send("XREAD", "STREAMS", "some_key", "1526985054069-0"));
+    run(client -> client.send("XADD", "some_key", "0-0", "temperature", "36", "humidity", "95"));
+    run(client -> client.send("XADD", "some_key", "0-1", "temperature", "37", "humidity", "94"));
+    String response = run(client -> client.send("XREAD", "STREAMS", "some_key", "0-0"));
 
     assertEquals(
         "*1\r\n"
@@ -361,7 +355,7 @@ public class MainTest {
             + "$8\r\nsome_key\r\n"
             + "*1\r\n"
             + "*2\r\n"
-            + "$15\r\n1526985054079-0\r\n"
+            + "$3\r\n0-1\r\n"
             + "*4\r\n"
             + "$11\r\ntemperature\r\n"
             + "$2\r\n37\r\n"
