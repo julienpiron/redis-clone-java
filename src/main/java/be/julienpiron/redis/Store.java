@@ -124,10 +124,15 @@ public class Store {
     KeyLock lock = getKeyLock(key);
     long remainingNanos = Duration.between(Instant.now(), timeout).toNanos();
     try {
+      logger.error("Waiting for {}", key);
       if (lock.tryLock(remainingNanos)) {
+        logger.error("Locked acquired");
         remainingNanos = Duration.between(Instant.now(), timeout).toNanos();
+        logger.error("remainingNanos: {}", remainingNanos);
         while (!map.containsKey(key)) {
+          logger.error("No entry at the moment");
           remainingNanos = lock.awaitNanos(remainingNanos);
+          logger.error("remainingNanos: {}", remainingNanos);
           if (remainingNanos < 0) {
             return null;
           }
@@ -141,12 +146,15 @@ public class Store {
             streamEntry.getValues().tailMap(fromKey.from(), inclusive);
 
         while ((result = streamEntry.getValues().tailMap(fromKey.from(), inclusive)).isEmpty()) {
+          logger.error("No stream in the entry");
+          logger.error("remainingNanos: {}", remainingNanos);
           remainingNanos = lock.awaitNanos(remainingNanos);
           if (remainingNanos < 0) {
             return null;
           }
         }
 
+        logger.error("remainingNanos: {}", remainingNanos);
         return result;
       } else {
         return null;
@@ -197,7 +205,7 @@ public class Store {
     KeyLock lock = getKeyLock(key);
     lock.lock();
     try {
-      logger.debug("Adding streams to {}", key);
+      logger.error("Adding streams to {}", key);
       StoreEntry entry = map.computeIfAbsent(key, (_) -> new StreamEntry());
 
       if (!(entry instanceof StreamEntry streamEntry))
@@ -206,6 +214,7 @@ public class Store {
       String generatedID = streamEntry.add(id, values, clock).toString();
 
       lock.signalAll();
+      logger.error("Signaling new entries");
 
       return generatedID;
     } finally {
