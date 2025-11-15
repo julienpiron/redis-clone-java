@@ -23,6 +23,14 @@ public record Request(String command, List<String> args) {
     }
   }
 
+  public long argAsLong(int index) throws InvalidRequestException {
+    try {
+      return Long.parseLong(args.get(index));
+    } catch (NumberFormatException | IndexOutOfBoundsException e) {
+      throw new InvalidRequestException(e);
+    }
+  }
+
   public double argAsDouble(int index) throws InvalidRequestException {
     try {
       return Double.parseDouble(args.get(index));

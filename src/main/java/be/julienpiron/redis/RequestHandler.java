@@ -1,8 +1,11 @@
 package be.julienpiron.redis;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.SortedMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +90,7 @@ public class RequestHandler {
       String id = request.argAsString(1);
 
       String generatedId =
-          store.setStream(key, id, request.args().subList(2, request.args().size()));
+          store.setStreamEntry(key, id, request.args().subList(2, request.args().size()));
 
       return new RESP.BulkString(generatedId);
     } catch (IllegalArgumentException e) {
@@ -95,43 +98,33 @@ public class RequestHandler {
     }
   }
 
+  private RESPDataType streamToRESP(Map.Entry<StreamId, Stream> entry) {
+    return new RESP.Array(
+        List.of(
+            new RESP.BulkString(entry.getKey().toString()),
+            new RESP.Array(
+                entry.getValue().values().stream()
+                    .map(RESP.BulkString::new)
+                    .collect(Collectors.toList()))));
+  }
+
   private RESPDataType xrange() throws InvalidRequestException {
     String key = request.argAsString(0);
-    StreamEntry entry = store.getStream(key);
 
-    Stream.ID from =
-        request.argAsString(1).equals("-")
-            ? null
-            : entry.parseID(request.argAsString(1), store.clock);
-    Stream.ID to =
-        request.argAsString(2).equals("+")
-            ? null
-            : entry.parseID(request.argAsString(2), store.clock);
+    PartialStreamId from = PartialStreamId.parse(request.argAsString(1));
+    PartialStreamId to = PartialStreamId.parse(request.argAsString(2));
 
-    List<RESPDataType> filteredStreams = new ArrayList<>();
+    SortedMap<StreamId, Stream> filteredStreams = store.getRangeStreams(key, from, to);
 
-    for (Stream stream : entry.getValues()) {
-      if (from != null && stream.id().compareTo(from) < 0) {
-        continue;
-      }
-      if (to != null && to.compareTo(stream.id()) < 0) {
-        break;
-      }
-
-      filteredStreams.add(
-          new RESP.Array(
-              List.of(
-                  new RESP.BulkString(stream.id().toString()),
-                  new RESP.Array(
-                      stream.values().stream()
-                          .map(RESP.BulkString::new)
-                          .collect(Collectors.toList())))));
-    }
-
-    return new RESP.Array(filteredStreams);
+    return new RESP.Array(
+        filteredStreams.entrySet().stream().map(this::streamToRESP).collect(Collectors.toList()));
   }
 
   private RESPDataType xread() throws InvalidRequestException {
+    if (request.argAsString(0).equalsIgnoreCase("BLOCK")) {
+      return xreadBlock();
+    }
+
     int numberOfStreams = (request.args().size() - 1) / 2;
 
     logger.debug("Number of streams: {}", numberOfStreams);
@@ -140,30 +133,42 @@ public class RequestHandler {
 
     for (int i = 1; i <= numberOfStreams; i++) {
       String key = request.argAsString(i);
-      StreamEntry entry = store.getStream(key);
 
-      Stream.ID from = entry.parseID(request.argAsString(i + numberOfStreams), store.clock);
+      PartialStreamId fromKey = PartialStreamId.parse(request.argAsString(i + numberOfStreams));
 
-      List<RESPDataType> filteredStreams = new ArrayList<>();
-
-      for (Stream stream : entry.getValues()) {
-        if (stream.id().compareTo(from) < 1) {
-          continue;
-        }
-
-        filteredStreams.add(
-            new RESP.Array(
-                List.of(
-                    new RESP.BulkString(stream.id().toString()),
-                    new RESP.Array(
-                        stream.values().stream()
-                            .map(RESP.BulkString::new)
-                            .collect(Collectors.toList())))));
-      }
+      SortedMap<StreamId, Stream> filteredStreams = store.getTailStreams(key, fromKey, false);
 
       result.add(
-          new RESP.Array(List.of(new RESP.BulkString(key), new RESP.Array(filteredStreams))));
+          new RESP.Array(
+              List.of(
+                  new RESP.BulkString(key),
+                  new RESP.Array(
+                      filteredStreams.entrySet().stream()
+                          .map(this::streamToRESP)
+                          .collect(Collectors.toList())))));
     }
     return new RESP.Array(result);
+  }
+
+  private RESPDataType xreadBlock() throws InvalidRequestException {
+    Instant timeout = Instant.now().plusMillis(request.argAsLong(1));
+    String key = request.argAsString(3);
+    PartialStreamId fromKey = PartialStreamId.parse(request.argAsString(4));
+
+    SortedMap<StreamId, Stream> streams = store.awaitTailStreams(key, fromKey, false, timeout);
+
+    if (streams == null) {
+      return new RESP.Array();
+    }
+
+    return new RESP.Array(
+        List.of(
+            new RESP.Array(
+                List.of(
+                    new RESP.BulkString(key),
+                    new RESP.Array(
+                        streams.entrySet().stream()
+                            .map(this::streamToRESP)
+                            .collect(Collectors.toList()))))));
   }
 }

@@ -9,25 +9,25 @@ interface RESPDataType {
 }
 
 public abstract class RESP {
-  public static String CTRL = "\r\n";
+  public static String CRLF = "\r\n";
 
   public record BulkString(String value) implements RESPDataType {
     public String encode() {
-      if (value == null) return "$-1" + CTRL;
+      if (value == null) return "$-1" + CRLF;
 
-      return "$" + value.length() + CTRL + value + CTRL;
+      return "$" + value.length() + CRLF + value + CRLF;
     }
   }
 
   public record SimpleString(String value) implements RESPDataType {
     public String encode() {
-      return "+" + value + CTRL;
+      return "+" + value + CRLF;
     }
   }
 
   public record SimpleError(String message) implements RESPDataType {
     public String encode() {
-      return "-" + message + CTRL;
+      return "-" + message + CRLF;
     }
   }
 
@@ -37,9 +37,12 @@ public abstract class RESP {
     }
 
     public String encode() {
+      if (items.isEmpty()) {
+        return "*-1" + CRLF;
+      }
       return "*"
           + items.size()
-          + CTRL
+          + CRLF
           + items.stream().map(item -> item.encode()).collect(Collectors.joining());
     }
   }

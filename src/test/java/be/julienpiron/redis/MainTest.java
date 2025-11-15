@@ -367,10 +367,10 @@ public class MainTest {
 
   @Test
   void shouldHandleXREADWithMultipleKeys() throws Exception {
-    String key1 = faker.lordOfTheRings().location();
+    String key1 = "key1";
     String temperature1 = Integer.toString(faker.number().numberBetween(0, 100));
 
-    String key2 = faker.lordOfTheRings().location();
+    String key2 = "key2";
     String temperature2 = Integer.toString(faker.number().numberBetween(0, 100));
 
     run(
@@ -412,6 +412,72 @@ public class MainTest {
                                                     new RESP.BulkString(temperature2)))))))))))
             .encode(),
         response);
+  }
+
+  @Test
+  void shouldHandleXREADWithTimeoutAndNoData() throws Exception {
+    String key = "key";
+
+    CompletableFuture<String> response =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try (TestClient client = new TestClient(server)) {
+                return client.send("XREAD", "BLOCK", "200", "STREAMS", key, "0-0");
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+            });
+
+    await().atLeast(190, MILLISECONDS).atMost(300, MILLISECONDS).until(response::isDone);
+
+    assertEquals("*-1\r\n", response.get());
+  }
+
+  @Test
+  void shouldHandleXREADWithTimeout() throws Exception {
+    String key = "key";
+
+    CompletableFuture<String> response =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try (TestClient client = new TestClient(server)) {
+                return client.send("XREAD", "BLOCK", "2000", "STREAMS", key, "0-0");
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+            });
+
+    CompletableFuture<Void> client2 =
+        CompletableFuture.runAsync(
+            () -> {
+              try (TestClient client = new TestClient(server)) {
+                Thread.sleep(100);
+                client.send("XADD", key, "0-1", "name", "harry");
+              } catch (Exception e) {
+                fail(e);
+              }
+            });
+
+    await()
+        .atLeast(100, MILLISECONDS)
+        .atMost(1000, MILLISECONDS)
+        .until(() -> CompletableFuture.allOf(response, client2).isDone());
+
+    assertEquals(
+        "*1\r\n"
+            + "*2\r\n"
+            + "$3\r\n"
+            + "key\r\n"
+            + "*1\r\n"
+            + "*2\r\n"
+            + "$3\r\n"
+            + "0-1\r\n"
+            + "*2\r\n"
+            + "$4\r\n"
+            + "name\r\n"
+            + "$5\r\n"
+            + "harry\r\n",
+        response.get());
   }
 
   private <T> T run(Function<TestClient, T> action) throws Exception {

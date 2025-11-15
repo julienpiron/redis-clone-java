@@ -43,6 +43,13 @@ public class RESPTest {
   }
 
   @Test
+  void shouldEncodeNullArray() {
+    RESP.Array array = new RESP.Array();
+
+    assertEquals("*-1\r\n", array.encode());
+  }
+
+  @Test
   void shouldCreateArrayFromListOfString() {
     RESP.Array array1 =
         new RESP.Array(List.of(new RESP.BulkString("Hello"), new RESP.BulkString("world")));
